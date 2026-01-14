@@ -1,56 +1,108 @@
 import streamlit as st
-from openai import OpenAI
+import requests
 
-# Show title and description.
-st.title("💬 Chatbot")
-st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
-)
+# タイトルと説明の表示
+st.title("💬 Gemini チャットボット")
+st.write("このシンプルなチャットボットは、Google の Gemini API を利用して応答を生成します。")
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
+# Streamlit Community CloudのSecretsからAPIキーを取得
+# .streamlit/secrets.toml に GEMINI_API_KEY = "YOUR_API_KEY" を設定してください
+gemini_api_key = st.secrets.get("GEMINI_API_KEY")
+
+if not gemini_api_key:
+    st.info("Streamlit Community CloudのSecretsに `GEMINI_API_KEY` を設定してください。", icon="🗝️")
 else:
+    # ユーザーがモデルを選択できるようにする
+    model_name = st.selectbox(
+        "使用する Gemini モデルを選択",
+        (
+            "gemini-2.5-flash", 
+            "gemini-2.5-pro",
+            "gemini-3-flash-preview", 
+            "gemini-3-pro-preview"
+        )
+    )
+    st.write(f"現在のモデル: **{model_name}**")
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
-
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display the existing chat messages via `st.chat_message`.
+    # 既存のチャットメッセージを表示
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+    # ユーザーがメッセージを入力するためのチャット入力フィールド
+    if prompt := st.chat_input("ここにメッセージを入力"):
 
-        # Store and display the current prompt.
+        # ユーザーのプロンプトを保存・表示
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
-        )
+        # Gemini API用にメッセージ形式を準備
+        gemini_messages = []
+        for m in st.session_state.messages:
+            api_role = "user" if m["role"] == "user" else "model"
+            gemini_messages.append(
+                {
+                    "role": api_role,
+                    "parts": [{"text": m["content"]}]
+                }
+            )
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        # APIキーを含まないクリーンなURLを定義
+        api_url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:generateContent"
+
+        # ヘッダーに Content-Type と APIキーを含める
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": gemini_api_key 
+        }
+        
+        data = {
+            "contents": gemini_messages,
+            "generationConfig": {
+                "temperature": 0.7,
+                "topP": 0.8
+                # maxOutputTokens はデフォルト値 (8192 など) が適用される
+            }
+        }
+
+        try:
+            # アシスタントの応答をチャットメッセージコンテナ内に表示
+            with st.chat_message("assistant"):
+                with st.spinner(f"{model_name} が応答を生成中..."):
+                    response = requests.post(api_url, headers=headers, json=data, timeout=30)
+                    response.raise_for_status() # HTTPエラーがあれば例外を発生
+                    
+                    result = response.json()
+                    
+                    # APIからのレスポンス構造のチェックと応答の取得
+                    if "candidates" in result and result["candidates"]:
+                        candidate = result["candidates"][0]
+                        
+                        # トークン上限超過のエラーハンドリングを維持
+                        if candidate.get("finishReason") == "MAX_TOKENS":
+                            gemini_reply = f"応答が途中で終了しました（トークン上限超過）。モデルの最大出力が尽きた可能性があります。"
+                        elif "content" in candidate and "parts" in candidate["content"] and candidate["content"]["parts"]:
+                            gemini_reply = candidate["content"]["parts"][0]["text"]
+                        else:
+                            # その他の予期しない応答形式
+                            gemini_reply = f"エラー: 予期しないAPI応答形式です。詳細: {result}"
+                    else:
+                        gemini_reply = f"エラー: 応答に候補が見つかりませんでした。詳細: {result}"
+
+                    st.markdown(gemini_reply)
+            
+            # アシスタントの応答をセッションステートに保存
+            st.session_state.messages.append({"role": "assistant", "content": gemini_reply})
+
+        except requests.exceptions.RequestException as e:
+            error_message = f"APIリクエストエラーが発生しました: {e}"
+            st.error(error_message)
+            st.session_state.messages.append({"role": "assistant", "content": error_message})
+        except Exception as e:
+            error_message = f"予期せぬエラーが発生しました: {e}"
+            st.error(error_message)
+            st.session_state.messages.append({"role": "assistant", "content": error_message})
