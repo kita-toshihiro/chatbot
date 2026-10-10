@@ -17,8 +17,8 @@ else:
         "使用する Gemini モデルを選択",
         (
             "gemini-3.8-flash", 
-            "gemini-3.1-pro",
-            "gemini-3.8-flash-lite"
+            "gemini-3.1-pro-preview",
+            "gemini-3.5-flash-lite"
         )
     )
     st.write(f"現在のモデル: **{model_name}**")
