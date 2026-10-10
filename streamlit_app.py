@@ -17,7 +17,6 @@ else:
         "使用する Gemini モデルを選択",
         (
             "gemini-3.8-flash", 
-            "gemini-3.1-pro-preview",
             "gemini-3.5-flash-lite"
         )
     )
