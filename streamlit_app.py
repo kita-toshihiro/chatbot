@@ -16,10 +16,9 @@ else:
     model_name = st.selectbox(
         "使用する Gemini モデルを選択",
         (
-            "gemini-2.5-flash", 
-            "gemini-2.5-pro",
-            "gemini-3-flash-preview", 
-            "gemini-3-pro-preview"
+            "gemini-3.8-flash", 
+            "gemini-3.1-pro",
+            "gemini-3.8-flash-lite"
         )
     )
     st.write(f"現在のモデル: **{model_name}**")
