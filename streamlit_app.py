@@ -22,11 +22,11 @@ else:
     model_name = st.selectbox(
         "使用する Cloudflare Workers AI モデルを選択",
         (
-            "@cf/google/gemma-4-26b-a4b-it",
-            "@cf/meta/llama-4-scout-17b-16e-instruct"
+            "@cf/meta/llama-4-scout-17b-16e-instruct",
             "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
             "@cf/qwen/qwen2.5-coder-32b-instruct",
             "@cf/qwen/qwen3.8-27b",
+            "@cf/google/gemma-4-26b-a4b-it",
         ),
     )
     st.write(f"現在のモデル: **{model_name}**")
